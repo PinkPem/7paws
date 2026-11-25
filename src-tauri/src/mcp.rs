@@ -54,6 +54,7 @@ fn tool_definitions() -> Value {
                             "eye2": { "type": "string", "description": "Second iris hex for heterochromia; defaults to eye" },
                             "ear": { "type": "string", "description": "Outer-ear colour hex; omit or leave empty to follow fur" },
                             "leg": { "type": "string", "description": "Limb colour hex, drawn as a gradient from fur down each leg; omit or leave empty to follow fur" },
+                            "legSolid": { "type": "boolean", "description": "true paints the limbs in one flat colour instead of fading out of fur (default false)" },
                             "pattern": { "type": "string", "enum": ["solid", "bicolor", "tabby", "calico"] },
                             "spots": {
                                 "type": "array",
@@ -111,7 +112,8 @@ fn cat_schema_guide() -> Value {
             "eye": "Iris colour.",
             "eye2": "Optional second iris colour (heterochromia); omit or repeat eye for matching eyes.",
             "ear": "Optional outer-ear colour; omit or leave empty to follow fur.",
-            "leg": "Optional limb colour; painted as a gradient from fur at the shoulder to this colour down each leg. Omit or leave empty to follow fur."
+            "leg": "Optional limb colour; painted as a gradient from fur at the shoulder to this colour down each leg. Omit or leave empty to follow fur.",
+            "legSolid": "Optional boolean: true paints the limbs flat instead of the fur-to-leg gradient."
         },
         "patterns": {
             "solid": "One colour; patch is ignored.",

@@ -67,7 +67,8 @@ export function buildCoatPalette(c: CustomCat): CoatPalette {
   if (c.ear) base.ear = c.ear;
   if (c.leg) {
     base.leg = c.leg;
-    base.legFade = [0.25, 0.55];   // the limb starts at the coat colour and turns into `leg` down the leg
+    // Solid limbs keep the colour up to the shoulder; the default fades in over the upper leg, like a sock.
+    base.legFade = c.legSolid ? [0, 0.02] : [0.25, 0.55];
   }
   switch (c.pattern) {
     case "solid":

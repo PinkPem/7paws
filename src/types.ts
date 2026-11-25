@@ -23,6 +23,8 @@ export interface CustomCat {
   ear?: string;
   /** 四肢颜色；空字符串表示跟随主色 */
   leg?: string;
+  /** 四肢用纯色（不渐变）；默认渐变，从主色过渡到四肢色 */
+  legSolid?: boolean;
   pattern: CatPattern;
   spots: CatSpot[];
 }

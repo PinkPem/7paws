@@ -457,11 +457,19 @@ const COLOR_SWATCHES = [
 
 const colorPopup = document.createElement("div");
 colorPopup.className = "color-popup hidden";
-colorPopup.innerHTML = `<div class="color-grid"></div><input class="color-hex" type="text" maxlength="7" spellcheck="false" aria-label="颜色值" /><button class="color-auto" type="button">跟随主色</button>`;
+colorPopup.innerHTML = `<div class="color-grid"></div><input class="color-hex" type="text" maxlength="7" spellcheck="false" aria-label="颜色值" /><label class="color-leg-solid check" hidden><input type="checkbox" /> 四肢渐变</label><button class="color-auto" type="button">跟随主色</button>`;
 document.body.appendChild(colorPopup);
 const colorGrid = colorPopup.querySelector<HTMLDivElement>(".color-grid")!;
 const colorHex = colorPopup.querySelector<HTMLInputElement>(".color-hex")!;
 const colorAuto = colorPopup.querySelector<HTMLButtonElement>(".color-auto")!;
+const colorLegSolid = colorPopup.querySelector<HTMLLabelElement>(".color-leg-solid")!;
+const colorLegSolidInput = colorLegSolid.querySelector("input") as HTMLInputElement;
+
+// 四肢：勾上渐变（默认，从主色过渡），取消则整条腿纯色。
+colorLegSolidInput.addEventListener("change", () => {
+  if (colorSlot !== "leg") return;
+  saveActiveCat({ legSolid: !colorLegSolidInput.checked });
+});
 
 // 外耳 / 四肢 可以回落成“跟随主色”。
 colorAuto.addEventListener("click", () => {
@@ -507,6 +515,8 @@ function openColorPopup(button: HTMLButtonElement, slot: ColorSlot) {
   colorSlot = slot;
   colorHex.value = cat[slot] || cat.fur;
   colorAuto.hidden = slot !== "ear" && slot !== "leg";
+  colorLegSolid.hidden = slot !== "leg";
+  colorLegSolidInput.checked = !cat.legSolid;
   colorPopup.classList.remove("hidden");
   const rect = button.getBoundingClientRect();
   const width = colorPopup.offsetWidth;

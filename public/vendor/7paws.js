@@ -6,7 +6,7 @@ const stubs = {}, $ = id => stubs[id] || (stubs[id] = document.createElement(id.
 const offs = [], on = (type, fn, opt) => { window.addEventListener(type, fn, opt); offs.push(() => window.removeEventListener(type, fn, opt)); };
 let dead = false, raf = 0, followKeys = false, showKeyLabels = true, idleActions = options.idleActions !== false, lastStrikeAt = -1e9, afterRender = null;
 const PAINT_MODE = !!options.paintMode;   // [7paws] the paint window drives its own pointer handling
-let ORBIT_YAW = 0, ORBIT_PITCH = 0, HEAD_HIDDEN = false;   // [7paws] paint-window view controls
+let ORBIT_YAW = 0, ORBIT_PITCH = 0, HEAD_HIDDEN = false, BODY_HIDDEN = false;   // [7paws] paint-window view controls
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), mix = (a, b, t) => a + (b - a) * t, rnd = (a, b) => a + Math.random() * (b - a);
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -884,7 +884,7 @@ return {
       }
       return null;
     };
-    const hh = HEAD_HIDDEN ? null : pick(headMesh), hb = pick(bodyMesh);
+    const hh = HEAD_HIDDEN ? null : pick(headMesh), hb = BODY_HIDDEN ? null : pick(bodyMesh);
     const hit = !hh ? hb : (!hb || hh.distance <= hb.distance ? hh : hb);
     if (!hit) return null;
     return { part: hit === hh ? 'head' : 'body', u: hit.uv.x, v: hit.uv.y };
@@ -916,6 +916,7 @@ return {
   },
   getOrbit() { return { yaw: ORBIT_YAW, pitch: ORBIT_PITCH }; },
   setHideHead(hide) { HEAD_HIDDEN = !!hide; head.visible = !HEAD_HIDDEN; },
+  setHideBody(hide) { BODY_HIDDEN = !!hide; bodyMesh.visible = !BODY_HIDDEN; },
   texSize: TEX,
   headSideAt(clientX, clientY) {
     return onHeadAt({ target: stageEl, clientX, clientY });

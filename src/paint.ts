@@ -15,6 +15,7 @@ const pitchInput = document.getElementById("pitch") as HTMLInputElement;
 const yawOut = document.getElementById("yawOut") as HTMLOutputElement;
 const pitchOut = document.getElementById("pitchOut") as HTMLOutputElement;
 const hideHeadInput = document.getElementById("hideHead") as HTMLInputElement;
+const hideBodyInput = document.getElementById("hideBody") as HTMLInputElement;
 const hint = document.getElementById("hint") as HTMLParagraphElement;
 
 const params = new URLSearchParams(location.search);
@@ -175,11 +176,20 @@ hideHeadInput.addEventListener("change", () => {
     : "在猫身上按住拖动即可涂色；对称绘制会把笔迹镜像到另一半。";
 });
 
+hideBodyInput.addEventListener("change", () => {
+  api!.setHideBody(hideBodyInput.checked);
+  hint.textContent = hideBodyInput.checked
+    ? "身体已隐藏，配合「视角（上下）」往上看可以给头下侧上色。"
+    : "在猫身上按住拖动即可涂色；对称绘制会把笔迹镜像到另一半。";
+});
+
 document.getElementById("resetView")?.addEventListener("click", () => {
   yawInput.value = "0";
   pitchInput.value = "0";
   hideHeadInput.checked = false;
+  hideBodyInput.checked = false;
   api!.setHideHead(false);
+  api!.setHideBody(false);
   applyView();
 });
 

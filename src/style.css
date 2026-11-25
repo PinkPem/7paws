@@ -616,6 +616,20 @@ body.settings-body .menu-head {
   transform: scale(1.08);
 }
 
+.color-leg-solid {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.color-leg-solid[hidden] {
+  display: none;
+}
+
 .color-auto {
   width: 100%;
   margin-top: 6px;

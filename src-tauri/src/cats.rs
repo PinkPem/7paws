@@ -72,6 +72,9 @@ pub struct CustomCat {
     /// Limb colour (a sock gradient from `fur`); empty follows `fur`.
     #[serde(default)]
     pub leg: String,
+    /// Paint the limb in one flat colour instead of fading out of `fur`.
+    #[serde(default)]
+    pub leg_solid: bool,
     pub pattern: String,
     pub spots: Vec<CatSpot>,
 }
@@ -88,6 +91,7 @@ impl Default for CustomCat {
             eye2: "#e2b93b".to_string(),
             ear: String::new(),
             leg: String::new(),
+            leg_solid: false,
             pattern: "bicolor".to_string(),
             spots: Vec::new(),
         }

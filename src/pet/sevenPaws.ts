@@ -42,6 +42,7 @@ export interface RefCatApi {
   setOrbit(yaw: number, pitch: number): void;
   getOrbit(): { yaw: number; pitch: number };
   setHideHead(hide: boolean): void;
+  setHideBody(hide: boolean): void;
   texSize: number;
   destroy(): void;
 }
