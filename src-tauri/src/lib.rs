@@ -31,6 +31,8 @@ pub const BASE_WIDTH_104: f64 = 740.0;
 pub const BASE_HEIGHT_104: f64 = 520.0;
 pub const SETTINGS_WIDTH: f64 = 244.0;
 pub const SETTINGS_HEIGHT: f64 = 516.0;
+pub const PAINT_WIDTH: f64 = 760.0;
+pub const PAINT_HEIGHT: f64 = 600.0;
 /// Safety cap for the server-side modal guard: even if the webview never
 /// reports the picker closing, outside clicks close the window again after this.
 const SETTINGS_MODAL_TIMEOUT_MS: u64 = 10 * 60 * 1000;
@@ -739,6 +741,48 @@ fn open_settings(app: AppHandle) {
     show_settings_window(&app);
 }
 
+/// The paint window: a normal, resizable window with the cat in it and a brush bar on the right.
+/// `coat` picks which coat to paint on; without it the page falls back to the last used coat.
+pub(crate) fn show_paint_window(app: &AppHandle, coat: Option<String>) {
+    let url = match coat.as_deref() {
+        Some(id) if !id.is_empty() => tauri::WebviewUrl::App(format!("paint.html?coat={id}").into()),
+        _ => tauri::WebviewUrl::App("paint.html".into()),
+    };
+    if let Some(win) = app.get_webview_window("paint") {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+        return;
+    }
+    let built = tauri::WebviewWindowBuilder::new(app, "paint", url)
+        .title("7paws 画毛色")
+        .inner_size(PAINT_WIDTH, PAINT_HEIGHT)
+        .min_inner_size(560.0, 420.0)
+        .resizable(true)
+        .always_on_top(true)
+        .additional_browser_args(BROWSER_ARGS)
+        .build();
+    match built {
+        Ok(win) => {
+            let _ = win.set_focus();
+        }
+        Err(e) => eprintln!("failed to open paint window: {e}"),
+    }
+}
+
+#[tauri::command]
+fn open_paint(app: AppHandle, coat: Option<String>) {
+    show_paint_window(&app, coat);
+}
+
+#[tauri::command]
+async fn close_paint(app: AppHandle) {
+    // Destroy so the paint WebView process exits with the window.
+    if let Some(win) = app.get_webview_window("paint") {
+        let _ = win.destroy();
+    }
+}
+
 #[tauri::command]
 async fn close_settings(app: AppHandle) {
     // Destroy rather than hide so the settings WebView process exits;
@@ -1248,6 +1292,8 @@ fn run_inner(_restarting: bool) {
             get_settings,
             update_settings,
             open_settings,
+            open_paint,
+            close_paint,
             close_settings,
             set_settings_modal,
             get_custom_cats,

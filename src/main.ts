@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SevenPawsPet } from "./pet/sevenPaws.ts";
+import type { BrushStroke } from "./pet/sevenPaws.ts";
 import { COATS } from "./pet/coats";
 import { ReminderController } from "./reminder.ts";
 import { defaultSettings } from "./defaults";
@@ -25,6 +26,17 @@ function syncReminder() {
   if (key === lastReminderKey) return;
   lastReminderKey = key;
   reminder.configure(settings.reminderEnabled, settings.reminderText, settings.reminderIntervalMinutes);
+}
+
+const BRUSH_KEY = "7paws.brush";
+
+function readBrush(): BrushStroke[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(BRUSH_KEY) || "[]");
+    return Array.isArray(list) ? (list as BrushStroke[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function bindPointer() {
@@ -139,6 +151,12 @@ async function boot() {
   bindPointer();
   listenGlobalKeysForDev();
   syncReminder();
+  scene.applyBrush(readBrush());
+  try {
+    localStorage.setItem("7paws.coat", settings.coat);
+  } catch {
+    // Storage may be blocked; the paint window then just asks for a coat.
+  }
 
   document.addEventListener("contextmenu", (event) => {
     event.preventDefault();
@@ -173,11 +191,17 @@ async function boot() {
       settings = ev.payload;
       scene.applySettings(settings, customCats);
       syncReminder();
+      try {
+        localStorage.setItem("7paws.coat", settings.coat);
+      } catch {
+        // Ignore storage that is unavailable.
+      }
     });
     await listen<CustomCat[]>("cat-cats", (ev) => {
       customCats = ev.payload;
       scene.applySettings(settings, customCats);
     });
+    await listen<BrushStroke[]>("cat-brush", (ev) => scene.applyBrush(ev.payload));
     await listen<{ trusted: boolean }>("cat-input-status", (ev) => {
       permNotice.classList.toggle("hidden", ev.payload.trusted);
     });

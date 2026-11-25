@@ -55,6 +55,7 @@ const customCoatEl = document.getElementById("customCoat") as HTMLDivElement;
 const patternSelect = document.getElementById("patternSelect") as HTMLButtonElement;
 const patternLabel = patternSelect.querySelector(".dropdown-label") as HTMLSpanElement;
 const photoBtn = document.getElementById("photoBtn") as HTMLButtonElement;
+const paintBtn = document.getElementById("paintBtn") as HTMLButtonElement;
 const photoInput = document.getElementById("photoInput") as HTMLInputElement;
 const catNameInput = document.getElementById("catName") as HTMLInputElement;
 const spotsStatus = document.getElementById("spotsStatus") as HTMLSpanElement;
@@ -1194,6 +1195,14 @@ function bindControls() {
   quitBtn.addEventListener("click", async () => {
     if (!isTauri) return;
     await invoke("quit_app");
+  });
+
+  paintBtn.addEventListener("click", () => {
+    if (isTauri) {
+      void invoke("open_paint", { coat: settings.coat });
+      return;
+    }
+    window.open(`paint.html?coat=${encodeURIComponent(settings.coat)}`, "_blank", "width=760,height=600");
   });
 
   closeBtn.addEventListener("click", hide);

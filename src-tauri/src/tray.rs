@@ -39,10 +39,11 @@ pub fn setup_tray(app: &AppHandle, settings: Arc<Mutex<AppSettings>>) -> tauri::
         None::<&str>,
     )?;
     let open_menu = MenuItem::with_id(app, "open_menu", "设置…", true, None::<&str>)?;
+    let paint = MenuItem::with_id(app, "paint", "画毛色…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
 
-    let menu = Menu::with_items(app, &[&show_pet, &lock_through, &open_menu, &sep, &quit])?;
+    let menu = Menu::with_items(app, &[&show_pet, &lock_through, &open_menu, &paint, &sep, &quit])?;
     let icon = Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?;
 
     let sync_app = app.clone();
@@ -92,6 +93,7 @@ pub fn setup_tray(app: &AppHandle, settings: Arc<Mutex<AppSettings>>) -> tauri::
                 let _ = app.emit("cat-settings", out);
             }
             "open_menu" => crate::show_settings_window(app),
+            "paint" => crate::show_paint_window(app, None),
             "quit" => app.exit(0),
             _ => {}
         })

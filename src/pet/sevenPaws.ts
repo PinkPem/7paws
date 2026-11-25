@@ -5,7 +5,15 @@ import { buildCoatPalette, type CoatPalette } from "./catPalette";
 
 type Region = [number, number, number, number];
 
-interface RefCatApi {
+export interface BrushStroke {
+  part: "head" | "body";
+  pts: [number, number][];
+  color: string;
+  size: number;
+  mirror?: boolean;
+}
+
+export interface RefCatApi {
   setInput(keys: Set<string>, buttons: Set<string>): void;
   tap(side: "Left" | "Right"): void;
   setOptions(options: Record<string, unknown>): void;
@@ -23,6 +31,15 @@ interface RefCatApi {
   setLayout(layout: string): void;
   setAfterRender(callback: (() => void) | null): void;
   captureFrame(opacity: number): ImageData | null;
+  coatUvAt(clientX: number, clientY: number): { part: "head" | "body"; u: number; v: number } | null;
+  brushStroke(part: "head" | "body", pts: [number, number][], opts: { color?: string; size?: number; mirror?: boolean }): number;
+  setBrushPreview(part: "head" | "body", pts: [number, number][], opts: { color?: string; size?: number; mirror?: boolean }): void;
+  clearBrushPreview(): void;
+  undoBrush(): number;
+  clearBrush(): number;
+  getBrush(): BrushStroke[];
+  setBrush(list: BrushStroke[]): void;
+  texSize: number;
   destroy(): void;
 }
 
@@ -30,7 +47,7 @@ declare global {
   interface Window {
     createCat?: (
       host: HTMLElement,
-      options?: { coat?: string; sleepMinutes?: number; idleActions?: boolean; pixelRatio?: number; win7Capture?: boolean; manualRender?: boolean; onError?: (message: string) => void; onDebug?: (message: string) => void },
+      options?: { coat?: string; sleepMinutes?: number; idleActions?: boolean; paintMode?: boolean; pixelRatio?: number; win7Capture?: boolean; manualRender?: boolean; onError?: (message: string) => void; onDebug?: (message: string) => void },
     ) => RefCatApi | null;
   }
 }
@@ -209,6 +226,10 @@ export class SevenPawsPet {
 
   hitRegions(): Region[] {
     return this.api.hitRegions();
+  }
+
+  applyBrush(list: BrushStroke[]) {
+    this.api.setBrush(list);
   }
 
   refreshHitRegions() {

@@ -15,6 +15,7 @@ const BUILTIN: &[(&str, &str)] = &[
     ("white", "白猫"),
     ("blue", "蓝灰猫"),
     ("gray-white", "灰白猫"),
+    ("gray-white-blaze", "灰白开脸猫"),
     ("orange-white", "橘白猫"),
     ("tortie", "玳瑁猫"),
     ("cream", "奶油猫"),

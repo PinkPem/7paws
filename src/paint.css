@@ -1,0 +1,94 @@
+:root {
+  --ink: #2f343c;
+  --muted: #6d7078;
+  --paper: #f4f1ea;
+  --line: rgba(47, 52, 60, 0.14);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#stage {
+  position: absolute;
+  inset: 0 148px 0 0;
+  cursor: crosshair;
+}
+
+#stage canvas { display: block; width: 100%; height: 100%; }
+
+#bar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 148px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  border-left: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.label { width: 100%; color: var(--muted); font-size: 11px; letter-spacing: 0.04em; }
+
+#swatches { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.swatch[data-active="true"] { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+input[type="color"] {
+  width: 100%;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+input[type="range"] { flex: 1; min-width: 60px; accent-color: #666d78; }
+output { width: 20px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.check { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+
+button {
+  flex: 1;
+  min-width: 54px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+button:hover { background: #f1eee7; }
+button.primary { background: var(--ink); border-color: var(--ink); color: #f7f3ea; }
+button.primary:hover { background: #3c424c; }
+
+#hint {
+  margin: auto 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+#hint b { color: var(--ink); font-weight: 600; }

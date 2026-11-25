@@ -5,6 +5,7 @@ const stageEl = host, hintEl = document.createElement('div');
 const stubs = {}, $ = id => stubs[id] || (stubs[id] = document.createElement(id.startsWith('btn') ? 'button' : 'div'));
 const offs = [], on = (type, fn, opt) => { window.addEventListener(type, fn, opt); offs.push(() => window.removeEventListener(type, fn, opt)); };
 let dead = false, raf = 0, followKeys = false, showKeyLabels = true, idleActions = options.idleActions !== false, lastStrikeAt = -1e9, afterRender = null;
+const PAINT_MODE = !!options.paintMode;   // [7paws] the paint window drives its own pointer handling
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), mix = (a, b, t) => a + (b - a) * t, rnd = (a, b) => a + Math.random() * (b - a);
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -227,10 +228,74 @@ const HEAD_R = [0.86, 0.66, 0.7];
 upper.matrixAutoUpdate = false;                              // the chest leans by shearing, so its base never leaves the desk
 const headFix = new THREE.Group(); headFix.matrixAutoUpdate = false; upper.add(headFix);   // undoes the shear so the head keeps its shape
 const head = new THREE.Group(); head.position.set(0, 2.3, 0.1); headFix.add(head);
-const TEX = 256, mkTex = () => { const c = document.createElement('canvas'); c.width = c.height = TEX; return { g: c.getContext('2d'), t: new THREE.CanvasTexture(c) }; };
+const TEX = 512, mkTex = () => { const c = document.createElement('canvas'); c.width = c.height = TEX; const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; return { g, t: new THREE.CanvasTexture(c) }; };
 const bodyTex = mkTex(), headTex = mkTex(); M.body.map = bodyTex.t; M.head = new THREE.MeshBasicMaterial({ map: headTex.t }); M.tail = flat('#101010');
+// [7paws] painted textures live at 512px and are seen at an angle: linear filtering + anisotropy keeps the stroke edges clean
+for (const tex of [bodyTex.t, headTex.t]) { tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.generateMipmaps = true; tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); }
 // u runs round the cat (0.25 = facing the viewer, 0.75 = the back), v runs bottom to top
 const blob = (g, u, v, ru, rv, color, rot = 0) => { g.fillStyle = color; for (const du of [-1, 0, 1]) { g.beginPath(); g.ellipse((u + du) * TEX, (1 - v) * TEX, ru * TEX, rv * TEX, rot, 0, 7); g.fill(); } };
+/* ---------- [7paws] hand-painted layer: strokes are drawn straight into the head / body textures ---------- */
+let brushStrokes = [];            // { part, pts: [[u, v], ...], color, size, mirror }
+let brushPreview = null;          // the stroke being dragged, painted but not committed
+let brushCoatId = null, lastCoat = null;
+const wrapU = u => ((u % 1) + 1) % 1;
+// A round pen on the model is an ellipse in texture space: the texture wraps 360° across u but only 180° across v.
+const PEN_X = { head: 0.56, body: 0.4 };   // horizontal squash that makes the pen look round on each part
+const allBrushStrokes = () => (brushPreview ? brushStrokes.concat([brushPreview]) : brushStrokes);
+function paintBrushLayer(g, part) {
+  const kx = PEN_X[part] || 1;
+  const px = TEX / 256;                       // stroke sizes are stored in 256-space, so they survive a texture resize
+  const at = (u, v, du) => [((wrapU(u) + du) * TEX) / kx, (1 - clamp(v, 0, 1)) * TEX];
+  const limb = (run, du) => {                 // quadratic through the midpoints: no visible corners between points
+    g.beginPath();
+    const p0 = at(run[0][0], run[0][1], du);
+    g.moveTo(p0[0], p0[1]);
+    if (run.length === 2) { const p1 = at(run[1][0], run[1][1], du); g.lineTo(p1[0], p1[1]); return; }
+    for (let i = 1; i < run.length - 1; i++) {
+      const a = at(run[i][0], run[i][1], du), b = at(run[i + 1][0], run[i + 1][1], du);
+      g.quadraticCurveTo(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+    }
+    const pl = at(run[run.length - 1][0], run[run.length - 1][1], du);
+    g.lineTo(pl[0], pl[1]);
+  };
+  for (const s of allBrushStrokes()) {
+    if (s.part !== part || !s.pts || !s.pts.length) continue;
+    const runs = [s.pts];
+    if (s.mirror) runs.push(s.pts.map(([u, v]) => [wrapU(0.5 - u), v]));   // mirror across the front centre line
+    const w = Math.max(1, s.size * px);
+    g.save(); g.scale(kx, 1);                                              // squashing x makes the round pen round on the model too
+    g.strokeStyle = s.color; g.fillStyle = s.color; g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const run of runs) {
+      for (const du of [-1, 0, 1]) {                                        // draw across the seam as well
+        if (run.length === 1) { const p = at(run[0][0], run[0][1], du); g.beginPath(); g.arc(p[0], p[1], w / 2, 0, 7); g.fill(); continue; }
+        limb(run, du); g.stroke();
+      }
+    }
+    g.restore();
+  }
+}
+function repaintCoat() { if (lastCoat) paintCoat(lastCoat); }
+
+// Which side of a mesh is "out"? The head sphere and the body loft are wound opposite ways, so measure it once
+// per mesh: the nearest hit of a ray aimed at the centre is, by definition, the surface facing the camera.
+const facingSigns = new Map(), facingBox = new THREE.Box3(), facingRay = new THREE.Raycaster(), facingDir = new THREE.Vector3(), brushNormal = new THREE.Vector3();
+function facingSign(obj) {
+  if (facingSigns.has(obj)) return facingSigns.get(obj);
+  let sign = -1;
+  if (obj && camera) {
+    facingBox.setFromObject(obj);
+    facingBox.getCenter(facingDir).sub(camera.position).normalize();
+    facingRay.set(camera.position, facingDir);
+    const h = facingRay.intersectObject(obj, false)[0];
+    if (h && h.face) {
+      const n = brushNormal.copy(h.face.normal).transformDirection(obj.matrixWorld);
+      sign = n.dot(facingDir) > 0 ? 1 : -1;
+    }
+  }
+  facingSigns.set(obj, sign);
+  return sign;
+}
+
 function paintCoat(c) {
   const b = bodyTex.g, h = headTex.g, pat = c.pattern || '';
   for (const g of [b, h]) { g.fillStyle = c.fur; g.fillRect(0, 0, TEX, TEX); }
@@ -261,9 +326,10 @@ function paintCoat(c) {
     for (const du of [-1, 0, 1]) { g2.beginPath(); g2.ellipse((clamp(sp.x || 0, 0, 1) + du) * TEX, (1 - clamp(sp.y || 0, 0, 1)) * TEX, clamp(sp.rx || 0.02, 0.005, 0.6) * TEX, clamp(sp.ry || 0.02, 0.005, 0.6) * TEX, rot, 0, 7); g2.fill(); }
     g2.restore();
   }
-    bodyTex.t.needsUpdate = headTex.t.needsUpdate = true; M.tail.color.set(c.tail || c.fur);
+  paintBrushLayer(b, 'body'); paintBrushLayer(h, 'head');
+  bodyTex.t.needsUpdate = headTex.t.needsUpdate = true; M.tail.color.set(c.tail || c.fur);
 }
-add(head, ball(1, M.head, HEAD_R[0], HEAD_R[1], HEAD_R[2]), 0, 0, 0);
+const headMesh = add(head, ball(1, M.head, HEAD_R[0], HEAD_R[1], HEAD_R[2]), 0, 0, 0);
 const tongue = add(head, ball(1, new THREE.MeshBasicMaterial({ color: '#f08a98' }), 0.06, 0.085, 0.04), 0.02, -0.36, 0.6); tongue.visible = false;
 const muzzle = add(head, ball(1, M.patch, 0.13, 0.08, 0.1), 0, -0.4, 0.5);
 for (const k of ['eye', 'eye2', 'pupil', 'stripe', 'inner']) M[k].side = THREE.DoubleSide;
@@ -389,6 +455,35 @@ const COATS = [
   { id: 'white', name: '白猫', fur: '#f8f6ef', patch: '#f8f6ef', line: '#8a8676', eye: '#5aa9c9', whisker: '#b5b1a2', whiskerOut: '#b5b1a2', stripe: '#f8f6ef', inner: '#f2b9b0' },
   { id: 'blue', name: '蓝灰猫', fur: '#8090a0', patch: '#8090a0', line: '#3c4650', eye: '#e0a63a', whisker: '#f4f4ee', stripe: '#667686', inner: '#c59aa0' },
   { id: 'gray-white', name: '灰白猫', fur: '#77808b', patch: '#f8f6ef', line: '#3c4650', eye: '#e0a63a', whisker: '#f4f4ee', whiskerOut: '#3c4650', stripe: '#77808b', inner: '#c59aa0' },
+  { id: 'gray-white-blaze', name: '灰白开脸猫', fur: '#666d78', patch: '#f7f3ea', line: '#2f343c', eye: '#c3c95f', whisker: '#f4f4ee', whiskerOut: '#2f343c', stripe: '#666d78', inner: '#e3e0d8', ear: '#3a404a', leg: '#f7f3ea', legFade: [0, 0.02], pupilRound: true, spots: [
+    { part: 'body', x: 0.25, y: 0.5, rx: 0.132, ry: 0.55, color: '#f7f3ea' },
+    { part: 'body', x: 0.1254, y: 0.8, rx: 0.032, ry: 0.052, color: '#f7f3ea' },
+    { part: 'body', x: 0.3746, y: 0.8, rx: 0.032, ry: 0.052, color: '#f7f3ea' },
+    { part: 'body', x: 0.1028, y: 0.56, rx: 0.03, ry: 0.058, color: '#f7f3ea' },
+    { part: 'body', x: 0.3972, y: 0.56, rx: 0.03, ry: 0.058, color: '#f7f3ea' },
+    { part: 'body', x: 0.115, y: 0.3, rx: 0.028, ry: 0.048, color: '#f7f3ea' },
+    { part: 'body', x: 0.385, y: 0.3, rx: 0.028, ry: 0.048, color: '#f7f3ea' },
+    { part: 'body', x: 0.1341, y: 0.69, rx: 0.03, ry: 0.04, color: '#666d78' },
+    { part: 'body', x: 0.3659, y: 0.69, rx: 0.03, ry: 0.04, color: '#666d78' },
+    { part: 'body', x: 0.1311, y: 0.43, rx: 0.028, ry: 0.042, color: '#666d78' },
+    { part: 'body', x: 0.3689, y: 0.43, rx: 0.028, ry: 0.042, color: '#666d78' },
+    { part: 'body', x: 0.1562, y: 0.16, rx: 0.024, ry: 0.034, color: '#666d78' },
+    { part: 'body', x: 0.3438, y: 0.16, rx: 0.024, ry: 0.034, color: '#666d78' },
+    { part: 'head', x: 0.25, y: 0.35, rx: 0.128, ry: 0.172, color: '#f7f3ea' },
+    { part: 'head', x: 0.25, y: 0.63, rx: 0.022, ry: 0.105, color: '#f7f3ea' },
+    { part: 'head', x: 0.225, y: 0.545, rx: 0.034, ry: 0.038, rotation: 32, color: '#f7f3ea' },
+    { part: 'head', x: 0.275, y: 0.545, rx: 0.034, ry: 0.038, rotation: -32, color: '#f7f3ea' },
+    { part: 'head', x: 0.25, y: 0.275, rx: 0.062, ry: 0.045, color: '#f7f3ea' },
+    { part: 'head', x: 0.13, y: 0.3, rx: 0.085, ry: 0.085, color: '#f7f3ea' },
+    { part: 'head', x: 0.37, y: 0.3, rx: 0.085, ry: 0.085, color: '#f7f3ea' },
+    { part: 'head', x: 0.25, y: 0.428, rx: 0.0165, ry: 0.008, color: '#241f1c' },
+    { part: 'head', x: 0.25, y: 0.4175, rx: 0.0146, ry: 0.008, color: '#241f1c' },
+    { part: 'head', x: 0.25, y: 0.407, rx: 0.0125, ry: 0.008, color: '#241f1c' },
+    { part: 'head', x: 0.25, y: 0.3965, rx: 0.0105, ry: 0.008, color: '#241f1c' },
+    { part: 'head', x: 0.25, y: 0.386, rx: 0.008, ry: 0.008, color: '#241f1c' },
+    { part: 'head', x: 0.25, y: 0.376, rx: 0.005, ry: 0.0065, color: '#241f1c' },
+    { part: 'head', x: 0.25, y: 0.267, rx: 0.035, ry: 0.06, color: '#3a404a' }
+  ] },
   { id: 'orange-white', name: '橘白猫', fur: '#e9973f', patch: '#fbf3e4', line: '#7a4312', eye: '#5c9a3a', whisker: '#fffaf0', whiskerOut: '#7a4312', stripe: '#e9973f', inner: '#efb0a0' },
   { id: 'tortie', name: '玳瑁猫', pattern: 'calico', fur: '#24201d', patch: '#24201d', patchA: '#c8692c', patchB: '#8c4d22', tail: '#24201d', line: '#8b8f86', eye: '#e2a83a', whisker: '#e8e4da', whiskerOut: '#24201d', stripe: '#24201d', inner: '#b98a80' },
   { id: 'cream', name: '奶油猫', pattern: 'tabby', fur: '#f2dcb3', patch: '#faf0dc', line: '#9a7b52', eye: '#c4722a', whisker: '#b5a688', whiskerOut: '#b5a688', stripe: '#e2bf8a', inner: '#eeaaa0' },
@@ -396,7 +491,10 @@ const COATS = [
 ];
 const WALLS = [['浅色桌面', 'transparent', '#e9ebb6'], ['深色桌面', '#1f2226', '#454c57'], ['蓝色桌面', '#2f5d8a', '#454c57'], ['照片桌面', 'linear-gradient(135deg,#3b2f4a,#b8693f 55%,#e9c46a)', '#454c57']];
 const coatLuma = hex => { const n = parseInt(hex.slice(1), 16); return (0.2126 * (n >> 16 & 255) + 0.7152 * (n >> 8 & 255) + 0.0722 * (n & 255)) / 255; };   // [7paws] brightness judged from the colour itself so photo-derived coats work too
-function applyCoat(c) { const furLum = coatLuma(c.fur); for (const k of ['fur', 'patch', 'line', 'eye', 'whisker', 'stripe', 'inner']) M[k].color.set(c[k]); M.eye2.color.set(c.eye2 || c.eye); M.body.color.set('#ffffff'); M.ear.color.set(c.ear || c.fur); LEG_COAT.base.set(c.fur); LEG_COAT.tip.set(c.leg || c.fur); LEG_COAT.fade = c.legFade || [0.38, 0.62]; paintCoat(c); M.lid.color.set(c.lid || c.fur); whiskers.forEach(w => w.pivot.scale.setScalar(0.78)); { const pale = furLum > 0.78, o = pale ? '#b5b1a2' : '#f1eee2', w = pale ? 0.7 : 1; renderer.domElement.style.filter = [[w, 0], [-w, 0], [0, w], [0, -w]].map(([x, y]) => `drop-shadow(${x}px ${y}px 0 ${o})`).join(' '); } M.shut.color.set(c.shut || (furLum < 0.16 ? c.eye : c.line)); M.whiskerOut.color.set(c.whiskerOut || c.line); muzzle.visible = false; chest.visible = false; hitColor.set(c.eye); }
+let PUPIL_ROUND = false;   // [7paws] coats may ask for a round pupil instead of the default slit
+function applyCoat(c) { const furLum = coatLuma(c.fur); PUPIL_ROUND = !!c.pupilRound; lastCoat = c;
+  const cid = c.id || 'custom';
+  if (cid !== brushCoatId) { brushCoatId = cid; brushStrokes = (c.brush || []).map(s => ({ ...s, pts: s.pts.map(p => [p[0], p[1]]) })); } for (const k of ['fur', 'patch', 'line', 'eye', 'whisker', 'stripe', 'inner']) M[k].color.set(c[k]); M.eye2.color.set(c.eye2 || c.eye); M.body.color.set('#ffffff'); M.ear.color.set(c.ear || c.fur); LEG_COAT.base.set(c.fur); LEG_COAT.tip.set(c.leg || c.fur); LEG_COAT.fade = c.legFade || [0.38, 0.62]; paintCoat(c); M.lid.color.set(c.lid || c.fur); whiskers.forEach(w => w.pivot.scale.setScalar(0.78)); { const pale = furLum > 0.78, o = pale ? '#b5b1a2' : '#f1eee2', w = pale ? 0.7 : 1; renderer.domElement.style.filter = [[w, 0], [-w, 0], [0, w], [0, -w]].map(([x, y]) => `drop-shadow(${x}px ${y}px 0 ${o})`).join(' '); } M.shut.color.set(c.shut || (furLum < 0.16 ? c.eye : c.line)); M.whiskerOut.color.set(c.whiskerOut || c.line); muzzle.visible = false; chest.visible = false; hitColor.set(c.eye); }
 function setCoat(i) { applyCoat(COATS[i]); [...stageEl.querySelectorAll('#coats button')].forEach((b, n) => b.setAttribute('aria-pressed', n === i)); }
 function setWall(i) { stageEl.style.background = WALLS[i][1]; deskMat.color.set(WALLS[i][2]); [...stageEl.querySelectorAll('#walls button')].forEach((b, n) => b.setAttribute('aria-pressed', n === i)); }
 COATS.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `<span class="sw" style="background:${c.fur}"></span>${c.name}`; b.onclick = () => setCoat(i); $('coats').appendChild(b); });
@@ -489,7 +587,8 @@ const hitExpand = objs => { hitBox.makeEmpty(); for (const o of objs) hitBox.exp
 let demo = false;
 const stopDemo = () => { if (!demo) return; demo = false; $('btnDemo').textContent = '播放演示'; hintEl.textContent = '正在跟随你的键盘'; [...S.down.keys()].forEach(keyUp); };
 let lastPointer = null;
-on('pointermove', e => { const r = stageEl.getBoundingClientRect(); S.pointer = { x: (e.clientX - r.left) / r.width * 2 - 1, y: (e.clientY - r.top) / r.height * 2 - 1 };
+on('pointermove', e => { if (PAINT_MODE) return;   // while painting the cat holds still: no gaze or lean tracking
+  const r = stageEl.getBoundingClientRect(); S.pointer = { x: (e.clientX - r.left) / r.width * 2 - 1, y: (e.clientY - r.top) / r.height * 2 - 1 };
   if (e.pointerType === 'touch') return;
   if (lastPointer) { const dx = e.clientX - lastPointer.x, dy = e.clientY - lastPointer.y; if (Math.abs(dx) + Math.abs(dy) > 2) { const t = performance.now(); wake(t); S.lastMouse = t; S.wigX = clamp(S.wigX + dx * 0.004, -0.16, 0.16); S.wigZ = clamp(S.wigZ + dy * 0.004, -0.12, 0.12); } }
   lastPointer = { x: e.clientX, y: e.clientY }; });
@@ -497,7 +596,7 @@ on('pointermove', e => { const r = stageEl.getBoundingClientRect(); S.pointer = 
 const petRay = new THREE.Raycaster(), petAt = new THREE.Vector2();
 const onHeadAt = e => { if (!stageEl.contains(e.target) || (e.target.closest && e.target.closest('button, input, a'))) return 0; const r = renderer.domElement.getBoundingClientRect(); petAt.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height * 2 - 1)); petRay.setFromCamera(petAt, camera);
   if (!petRay.intersectObject(head, true).length) return 0; proj.setFromMatrixPosition(head.matrixWorld).project(camera); return petAt.x > proj.x ? -1 : 1; };
-on('pointerdown', e => { if (e.button !== 0) return; const t = performance.now(), side = onHeadAt(e); wake(t); if (side) { S.pet = true; S.petSide = side; S.happyUntil = 1e15; return; }
+on('pointerdown', e => { if (e.button !== 0 || PAINT_MODE) return; const t = performance.now(), side = onHeadAt(e); wake(t); if (side) { S.pet = true; S.petSide = side; S.happyUntil = 1e15; return; }
 });
 on('pointerout', e => { /* keep the last global cursor position for gaze tracking */ });
 const endPet = () => { if (S.pet) { S.pet = false; S.happyUntil = performance.now() + 900; } };
@@ -618,9 +717,9 @@ function frame() {
     const pet = dir < 0, shut = c > 0.7, h = iry * mix(1, pet ? 0.7 : 0.3, smooth(0, 0.8, c)), eyc = ey + (dir * h * (pet ? 0.84 : 0.7) - iry) * smooth(0.35, 0.7, c);   // the closed line rests half an eye below the eye's centre
     e.iris.material = shut ? M.shut : (e.s > 0 ? M.eye2 : M.eye);
     fillPatch(e.iris, e.s * ex, eyc, er * (shut ? (pet ? 0.8 : 0.92) : 1), h, e.s * P.eyeTilt, 0.008);
-    const prx = er * 0.3 * widen, dx = clamp(S.gazeX * er * 0.42, -(er * 0.9 - prx), er * 0.9 - prx);
+    const prx = er * (PUPIL_ROUND ? 0.44 : 0.3) * widen, dx = clamp(S.gazeX * er * 0.42, -(er * 0.9 - prx), er * 0.9 - prx);
     const room = h * Math.sqrt(Math.max(0, 1 - ((Math.abs(dx) + prx * 0.7) / er) ** 2));   // how tall the eye is where the pupil sits
-    const pry = Math.min(er * 0.62, room * 0.68), dy = clamp(-S.gazeY * iry * 0.34, -(room - pry), room - pry);
+    const pry = PUPIL_ROUND ? Math.min(er * 0.44, room * 0.9) : Math.min(er * 0.62, room * 0.68), dy = clamp(-S.gazeY * iry * 0.34, -(room - pry), room - pry);
     fillPatch(e.pupil, e.s * ex + dx, eyc + dy, prx, pry, e.s * P.eyeTilt * 0.5, 0.013);
     e.pupil.visible = c < 0.45; e.lid.visible = shut;
     if (shut) fillPatch(e.lid, e.s * ex, eyc + dir * h * (pet ? 0.32 : 0.6), er * (pet ? 0.8 : 1.08), h, e.s * P.eyeTilt, 0.018);
@@ -761,6 +860,54 @@ return {
   coats: COATS.map(c => c.id),
   setAfterRender(callback) { afterRender = callback; },
   captureFrame(opacity) { return renderCaptureFrame(opacity); },
+  // [7paws] painting: map a screen point to the coat texture and draw strokes into it.
+  coatUvAt(clientX, clientY) {
+    const r = renderer.domElement.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    petAt.set((clientX - r.left) / r.width * 2 - 1, -((clientY - r.top) / r.height * 2 - 1));
+    scene.updateMatrixWorld(true);
+    petRay.setFromCamera(petAt, camera);
+    // Only accept a surface that actually faces the camera. Near the silhouette the ray grazes the mesh and the hit
+    // point slides around to the far side, so a stroke would jump to the flank (the "cannot paint the bottom"
+    // symptom). The head sphere is wound outwards while the body loft is wound inwards, so each mesh gets its own
+    // sign, measured once from a ray aimed at its centre.
+    const pick = obj => {
+      const sc = facingSign(obj);
+      for (const h of petRay.intersectObject(obj, false)) {
+        if (!h.uv || !h.face) continue;
+        const n = brushNormal.copy(h.face.normal).transformDirection(h.object.matrixWorld);
+        if (sc * n.dot(petRay.ray.direction) <= 0.12) continue;
+        return h;
+      }
+      return null;
+    };
+    const hh = pick(headMesh), hb = pick(bodyMesh);
+    const hit = !hh ? hb : (!hb || hh.distance <= hb.distance ? hh : hb);
+    if (!hit) return null;
+    return { part: hit === hh ? 'head' : 'body', u: hit.uv.x, v: hit.uv.y };
+  },
+  brushStroke(part, pts, opts) {
+    const o = opts || {};
+    brushPreview = null;
+    if (!pts || !pts.length || (part !== 'head' && part !== 'body')) return brushStrokes.length;
+    const clean = pts.filter(p => p && isFinite(p[0]) && isFinite(p[1])).map(p => [wrapU(p[0]), clamp(p[1], 0, 1)]);
+    if (!clean.length) return brushStrokes.length;
+    brushStrokes.push({ part, pts: clean, color: o.color || '#666d78', size: clamp(o.size || 8, 1, 80), mirror: !!o.mirror });
+    repaintCoat();
+    return brushStrokes.length;
+  },
+  undoBrush() { brushStrokes.pop(); repaintCoat(); return brushStrokes.length; },
+  setBrushPreview(part, pts, opts) {
+    const o = opts || {};
+    if (!pts || !pts.length) { brushPreview = null; repaintCoat(); return; }
+    brushPreview = { part, pts: pts.map(p => [wrapU(p[0]), clamp(p[1], 0, 1)]), color: o.color || '#666d78', size: clamp(o.size || 8, 1, 80), mirror: !!o.mirror };
+    repaintCoat();
+  },
+  clearBrushPreview() { if (brushPreview) { brushPreview = null; repaintCoat(); } },
+  clearBrush() { brushStrokes = []; repaintCoat(); return 0; },
+  getBrush() { return brushStrokes; },
+  setBrush(list) { brushStrokes = Array.isArray(list) ? list : []; repaintCoat(); },
+  texSize: TEX,
   headSideAt(clientX, clientY) {
     return onHeadAt({ target: stageEl, clientX, clientY });
   },

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>7paws 画毛色</title>
+  </head>
+  <body>
+    <div id="stage" role="application" aria-label="画笔绘制区"></div>
+
+    <aside id="bar">
+      <div class="row">
+        <span class="label">颜色</span>
+        <div id="swatches"></div>
+      </div>
+      <div class="row">
+        <span class="label">自定义</span>
+        <input id="color" type="color" value="#f7f3ea" />
+      </div>
+      <div class="row">
+        <span class="label">笔刷</span>
+        <input id="size" type="range" min="2" max="48" step="1" value="10" />
+        <output id="sizeOut">10</output>
+      </div>
+      <div class="row">
+        <label class="check"><input id="mirror" type="checkbox" checked /> 对称绘制</label>
+      </div>
+      <div class="row">
+        <button id="undo" type="button">撤销</button>
+        <button id="clear" type="button">清空</button>
+      </div>
+      <div class="row">
+        <button id="copy" type="button">复制笔迹</button>
+        <button id="done" type="button" class="primary">完成</button>
+      </div>
+      <p id="hint">在猫身上按住拖动即可涂色；<b>对称绘制</b> 会把笔迹镜像到另一半。</p>
+    </aside>
+
+    <script src="/vendor/three.min.js"></script>
+    <script src="/vendor/7paws.js"></script>
+    <script type="module" src="/src/paint.ts"></script>
+  </body>
+</html>

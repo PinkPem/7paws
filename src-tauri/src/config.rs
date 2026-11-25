@@ -15,6 +15,7 @@ pub(crate) const COATS: &[&str] = &[
     "white",
     "blue",
     "gray-white",
+    "gray-white-blaze",
     "orange-white",
     "tortie",
     "cream",
