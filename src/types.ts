@@ -19,6 +19,10 @@ export interface CustomCat {
   accent: string;
   eye: string;
   eye2: string;
+  /** 外耳颜色；空字符串表示跟随主色 */
+  ear?: string;
+  /** 四肢颜色；空字符串表示跟随主色 */
+  leg?: string;
   pattern: CatPattern;
   spots: CatSpot[];
 }

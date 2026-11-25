@@ -6,6 +6,7 @@ const stubs = {}, $ = id => stubs[id] || (stubs[id] = document.createElement(id.
 const offs = [], on = (type, fn, opt) => { window.addEventListener(type, fn, opt); offs.push(() => window.removeEventListener(type, fn, opt)); };
 let dead = false, raf = 0, followKeys = false, showKeyLabels = true, idleActions = options.idleActions !== false, lastStrikeAt = -1e9, afterRender = null;
 const PAINT_MODE = !!options.paintMode;   // [7paws] the paint window drives its own pointer handling
+let ORBIT_YAW = 0, ORBIT_PITCH = 0, HEAD_HIDDEN = false;   // [7paws] paint-window view controls
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), mix = (a, b, t) => a + (b - a) * t, rnd = (a, b) => a + Math.random() * (b - a);
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -653,7 +654,9 @@ function frame() {
   if (renderer.domElement.width !== Math.round(w * renderer.getPixelRatio()) || renderer.domElement.height !== Math.round(h * renderer.getPixelRatio())) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w / h < 1 ? 38 : 31; camera.updateProjectionMatrix(); }
   if (VIEW.has('a')) S.spin = +VIEW.get('a');
   if (S.spinning) { S.spin += dt * 2.4; if (S.spin >= Math.PI * 2) { S.spin = 0; S.spinning = false; } }
-  camera.position.set(Math.sin(S.spin) * CAM.z, CAM.y, Math.cos(S.spin) * CAM.z + (1 - Math.cos(S.spin)) * LOOK.z); camera.lookAt(LOOK);
+  // [7paws] painting may orbit the view; ORBIT / ORBIT_PITCH are 0 unless the paint window moves them
+  const yaw = S.spin + ORBIT_YAW, orbitR = CAM.z * Math.cos(ORBIT_PITCH);
+  camera.position.set(Math.sin(yaw) * orbitR, CAM.y + Math.sin(ORBIT_PITCH) * CAM.z, Math.cos(yaw) * orbitR + (1 - Math.cos(yaw)) * LOOK.z); camera.lookAt(LOOK);
 
   // keys
   const jolt = 0.03 * Math.exp(-(t - S.jolt) / 55); board.position.y = -jolt;
@@ -881,7 +884,7 @@ return {
       }
       return null;
     };
-    const hh = pick(headMesh), hb = pick(bodyMesh);
+    const hh = HEAD_HIDDEN ? null : pick(headMesh), hb = pick(bodyMesh);
     const hit = !hh ? hb : (!hb || hh.distance <= hb.distance ? hh : hb);
     if (!hit) return null;
     return { part: hit === hh ? 'head' : 'body', u: hit.uv.x, v: hit.uv.y };
@@ -907,6 +910,12 @@ return {
   clearBrush() { brushStrokes = []; repaintCoat(); return 0; },
   getBrush() { return brushStrokes; },
   setBrush(list) { brushStrokes = Array.isArray(list) ? list : []; repaintCoat(); },
+  setOrbit(yaw, pitch) {
+    if (isFinite(yaw)) ORBIT_YAW = yaw;
+    if (isFinite(pitch)) ORBIT_PITCH = clamp(pitch, -0.7, 0.7);
+  },
+  getOrbit() { return { yaw: ORBIT_YAW, pitch: ORBIT_PITCH }; },
+  setHideHead(hide) { HEAD_HIDDEN = !!hide; head.visible = !HEAD_HIDDEN; },
   texSize: TEX,
   headSideAt(clientX, clientY) {
     return onHeadAt({ target: stageEl, clientX, clientY });

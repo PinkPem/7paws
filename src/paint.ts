@@ -10,6 +10,11 @@ const colorInput = document.getElementById("color") as HTMLInputElement;
 const sizeInput = document.getElementById("size") as HTMLInputElement;
 const sizeOut = document.getElementById("sizeOut") as HTMLOutputElement;
 const mirrorInput = document.getElementById("mirror") as HTMLInputElement;
+const yawInput = document.getElementById("yaw") as HTMLInputElement;
+const pitchInput = document.getElementById("pitch") as HTMLInputElement;
+const yawOut = document.getElementById("yawOut") as HTMLOutputElement;
+const pitchOut = document.getElementById("pitchOut") as HTMLOutputElement;
+const hideHeadInput = document.getElementById("hideHead") as HTMLInputElement;
 const hint = document.getElementById("hint") as HTMLParagraphElement;
 
 const params = new URLSearchParams(location.search);
@@ -152,6 +157,32 @@ mirrorInput.addEventListener("change", () => {
   mirror = mirrorInput.checked;
 });
 
+function applyView() {
+  const yaw = (Number(yawInput.value) * Math.PI) / 180;
+  const pitch = (Number(pitchInput.value) * Math.PI) / 180;
+  api!.setOrbit(yaw, pitch);
+  yawOut.textContent = `${yawInput.value}°`;
+  pitchOut.textContent = `${pitchInput.value}°`;
+}
+
+yawInput.addEventListener("input", applyView);
+pitchInput.addEventListener("input", applyView);
+
+hideHeadInput.addEventListener("change", () => {
+  api!.setHideHead(hideHeadInput.checked);
+  hint.textContent = hideHeadInput.checked
+    ? "头部已隐藏，现在可以给脖子和胸口上缘上色；画完记得关掉。"
+    : "在猫身上按住拖动即可涂色；对称绘制会把笔迹镜像到另一半。";
+});
+
+document.getElementById("resetView")?.addEventListener("click", () => {
+  yawInput.value = "0";
+  pitchInput.value = "0";
+  hideHeadInput.checked = false;
+  api!.setHideHead(false);
+  applyView();
+});
+
 document.getElementById("undo")?.addEventListener("click", () => {
   api!.undoBrush();
   writeStrokes(api!.getBrush());
@@ -197,4 +228,5 @@ window.addEventListener("keydown", (event) => {
 buildSwatches();
 api.setBrush(readStrokes());
 sizeOut.textContent = sizeInput.value;
-hint.textContent = "在猫身上按住拖动即可涂色；对称绘制会把笔迹镜像到另一半。";
+applyView();
+hint.textContent = "在猫身上按住拖动即可涂色；对称绘制会把笔迹镜像到另一半。转视角或隐藏头部可以画到背面与脖子。";

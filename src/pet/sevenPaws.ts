@@ -39,6 +39,9 @@ export interface RefCatApi {
   clearBrush(): number;
   getBrush(): BrushStroke[];
   setBrush(list: BrushStroke[]): void;
+  setOrbit(yaw: number, pitch: number): void;
+  getOrbit(): { yaw: number; pitch: number };
+  setHideHead(hide: boolean): void;
   texSize: number;
   destroy(): void;
 }

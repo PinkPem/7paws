@@ -66,7 +66,7 @@ const coatCodeImport = document.getElementById("coatCodeImport") as HTMLButtonEl
 const deleteCatBtn = document.getElementById("deleteCatBtn") as HTMLButtonElement;
 const colorSlotButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".color-slot"));
 
-type ColorSlot = keyof Pick<CustomCat, "fur" | "patch" | "accent" | "eye" | "eye2">;
+type ColorSlot = keyof Pick<CustomCat, "fur" | "patch" | "accent" | "eye" | "eye2" | "ear" | "leg">;
 
 let settings: AppSettings = { ...defaultSettings };
 let customCats: CustomCat[] = [];
@@ -457,10 +457,19 @@ const COLOR_SWATCHES = [
 
 const colorPopup = document.createElement("div");
 colorPopup.className = "color-popup hidden";
-colorPopup.innerHTML = `<div class="color-grid"></div><input class="color-hex" type="text" maxlength="7" spellcheck="false" aria-label="颜色值" />`;
+colorPopup.innerHTML = `<div class="color-grid"></div><input class="color-hex" type="text" maxlength="7" spellcheck="false" aria-label="颜色值" /><button class="color-auto" type="button">跟随主色</button>`;
 document.body.appendChild(colorPopup);
 const colorGrid = colorPopup.querySelector<HTMLDivElement>(".color-grid")!;
 const colorHex = colorPopup.querySelector<HTMLInputElement>(".color-hex")!;
+const colorAuto = colorPopup.querySelector<HTMLButtonElement>(".color-auto")!;
+
+// 外耳 / 四肢 可以回落成“跟随主色”。
+colorAuto.addEventListener("click", () => {
+  const slot = colorSlot;
+  if (slot !== "ear" && slot !== "leg") return;
+  closeColorPopup();
+  saveActiveCat({ [slot]: "" } as Partial<CustomCat>);
+});
 
 let colorSlot: ColorSlot | null = null;
 
@@ -496,7 +505,8 @@ function openColorPopup(button: HTMLButtonElement, slot: ColorSlot) {
   }
   closeColorPopup();
   colorSlot = slot;
-  colorHex.value = cat[slot];
+  colorHex.value = cat[slot] || cat.fur;
+  colorAuto.hidden = slot !== "ear" && slot !== "leg";
   colorPopup.classList.remove("hidden");
   const rect = button.getBoundingClientRect();
   const width = colorPopup.offsetWidth;
@@ -519,7 +529,7 @@ colorHex.addEventListener("change", () => {
   if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
     pickColor(hex.toLowerCase());
   } else if (colorSlot && cat) {
-    colorHex.value = cat[colorSlot];
+    colorHex.value = cat[colorSlot] || cat.fur;
   }
 });
 
@@ -754,7 +764,14 @@ function syncControls() {
     if (document.activeElement !== catNameInput) catNameInput.value = cat.name;
     for (const btn of colorSlotButtons) {
       const dot = btn.querySelector<HTMLElement>(".color-dot");
-      if (dot) dot.style.background = cat[btn.dataset.slot as ColorSlot];
+      const slot = btn.dataset.slot as ColorSlot;
+      const value = cat[slot];
+      // 外耳 / 四肢 留空表示跟随主色：用主色显示，加一层虚线边表示“自动”。
+      if (dot) {
+        dot.style.background = value || cat.fur;
+        dot.style.borderStyle = value ? "solid" : "dashed";
+      }
+      btn.title = value ? `${value}（点击修改）` : "跟随主色（点击修改）";
     }
     patternLabel.textContent = patternChoices.find((c) => c.value === cat.pattern)?.label ?? "双色";
     spotsStatus.textContent = cat.spots.length ? `斑纹 ${cat.spots.length} 处` : "暂无斑纹";
@@ -813,6 +830,8 @@ async function createCat() {
     accent: "#c26a1f",
     eye: "#5c8a3a",
     eye2: "#5c8a3a",
+    ear: "",
+    leg: "",
     pattern: "bicolor",
     spots: [],
   };
@@ -866,6 +885,8 @@ function catFromCode(raw: string): CustomCat | null {
       accent: str(parsed.accent, "#e9973f"),
       eye: str(parsed.eye, "#e2b93b"),
       eye2: str(parsed.eye2, str(parsed.eye, "#e2b93b")),
+      ear: str(parsed.ear, ""),
+      leg: str(parsed.leg, ""),
       pattern,
       spots: Array.isArray(parsed.spots) ? (parsed.spots.slice(0, 24) as CatSpot[]) : [],
     };

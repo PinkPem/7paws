@@ -14,6 +14,9 @@ export interface CoatPalette {
   patchA?: string;
   patchB?: string;
   tail?: string;
+  ear?: string;
+  leg?: string;
+  legFade?: [number, number];
   spots: CatSpot[];
 }
 
@@ -60,6 +63,12 @@ export function buildCoatPalette(c: CustomCat): CoatPalette {
     inner,
     spots: c.spots ?? [],
   };
+  // Optional colour slots: an empty string means "follow the main coat colour".
+  if (c.ear) base.ear = c.ear;
+  if (c.leg) {
+    base.leg = c.leg;
+    base.legFade = [0.25, 0.55];   // the limb starts at the coat colour and turns into `leg` down the leg
+  }
   switch (c.pattern) {
     case "solid":
       return { ...base, patch: fur, stripe: fur };

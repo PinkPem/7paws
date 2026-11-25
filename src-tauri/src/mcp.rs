@@ -52,6 +52,8 @@ fn tool_definitions() -> Value {
                             "accent": { "type": "string", "description": "Third colour hex used by calico patches and tail" },
                             "eye": { "type": "string", "description": "Iris hex, e.g. '#5c8a3a'" },
                             "eye2": { "type": "string", "description": "Second iris hex for heterochromia; defaults to eye" },
+                            "ear": { "type": "string", "description": "Outer-ear colour hex; omit or leave empty to follow fur" },
+                            "leg": { "type": "string", "description": "Limb colour hex, drawn as a gradient from fur down each leg; omit or leave empty to follow fur" },
                             "pattern": { "type": "string", "enum": ["solid", "bicolor", "tabby", "calico"] },
                             "spots": {
                                 "type": "array",
@@ -107,7 +109,9 @@ fn cat_schema_guide() -> Value {
             "patch": "Second colour. bicolor: patches (tuxedo bib/socks look). tabby: belly/muzzle tone. calico: first patch colour.",
             "accent": "Third colour, only used by calico (second patch colour, also the tail).",
             "eye": "Iris colour.",
-            "eye2": "Optional second iris colour (heterochromia); omit or repeat eye for matching eyes."
+            "eye2": "Optional second iris colour (heterochromia); omit or repeat eye for matching eyes.",
+            "ear": "Optional outer-ear colour; omit or leave empty to follow fur.",
+            "leg": "Optional limb colour; painted as a gradient from fur at the shoulder to this colour down each leg. Omit or leave empty to follow fur."
         },
         "patterns": {
             "solid": "One colour; patch is ignored.",

@@ -26,6 +26,22 @@
         <label class="check"><input id="mirror" type="checkbox" checked /> 对称绘制</label>
       </div>
       <div class="row">
+        <span class="label">视角（左右）</span>
+        <input id="yaw" type="range" min="-180" max="180" step="1" value="0" />
+        <output id="yawOut">0°</output>
+      </div>
+      <div class="row">
+        <span class="label">视角（上下）</span>
+        <input id="pitch" type="range" min="-35" max="35" step="1" value="0" />
+        <output id="pitchOut">0°</output>
+      </div>
+      <div class="row">
+        <label class="check" title="头部暂时隐藏，便于给脖子和胸口上缘上色"><input id="hideHead" type="checkbox" /> 隐藏头部（画脖子）</label>
+      </div>
+      <div class="row">
+        <button id="resetView" type="button">重置视角</button>
+      </div>
+      <div class="row">
         <button id="undo" type="button">撤销</button>
         <button id="clear" type="button">清空</button>
       </div>
@@ -33,7 +49,7 @@
         <button id="copy" type="button">复制笔迹</button>
         <button id="done" type="button" class="primary">完成</button>
       </div>
-      <p id="hint">在猫身上按住拖动即可涂色；<b>对称绘制</b> 会把笔迹镜像到另一半。</p>
+      <p id="hint">在猫身上按住拖动即可涂色；<b>对称绘制</b> 会把笔迹镜像到另一半。转视角或隐藏头部可以画到背面与脖子。</p>
     </aside>
 
     <script src="/vendor/three.min.js"></script>
