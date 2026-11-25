@@ -742,28 +742,45 @@ fn open_settings(app: AppHandle) {
 }
 
 /// The paint window: a normal, resizable window with the cat in it and a brush bar on the right.
-/// `coat` picks which coat to paint on; without it the page falls back to the last used coat.
-pub(crate) fn show_paint_window(app: &AppHandle, coat: Option<String>) {
-    let url = match coat.as_deref() {
-        Some(id) if !id.is_empty() => tauri::WebviewUrl::App(format!("paint.html?coat={id}").into()),
-        _ => tauri::WebviewUrl::App("paint.html".into()),
-    };
+/// Creation runs on its own thread with a lock, exactly like the settings window: building a
+/// WebView inline from an IPC or tray callback deadlocks WebView2 on the main thread (the
+/// symptom is a white window and an application that stops responding).
+static PAINT_CREATE_LOCK: Mutex<()> = Mutex::new(());
+
+pub(crate) fn show_paint_window(app: &AppHandle) {
+    let app = app.clone();
+    thread::spawn(move || {
+        let Ok(_guard) = PAINT_CREATE_LOCK.try_lock() else {
+            return;
+        };
+        show_paint_window_blocking(&app);
+    });
+}
+
+fn show_paint_window_blocking(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("paint") {
         let _ = win.show();
         let _ = win.unminimize();
         let _ = win.set_focus();
         return;
     }
-    let built = tauri::WebviewWindowBuilder::new(app, "paint", url)
-        .title("7paws 画毛色")
-        .inner_size(PAINT_WIDTH, PAINT_HEIGHT)
-        .min_inner_size(560.0, 420.0)
-        .resizable(true)
-        .always_on_top(true)
-        .additional_browser_args(BROWSER_ARGS)
-        .build();
+    let built = tauri::WebviewWindowBuilder::new(
+        app,
+        "paint",
+        tauri::WebviewUrl::App("paint.html".into()),
+    )
+    .title("7paws 画毛色")
+    .inner_size(PAINT_WIDTH, PAINT_HEIGHT)
+    .min_inner_size(560.0, 420.0)
+    .resizable(true)
+    .always_on_top(true)
+    // Must match the main window: WebView2 rejects a second webview that
+    // requests different browser arguments against the shared environment.
+    .additional_browser_args(BROWSER_ARGS)
+    .build();
     match built {
         Ok(win) => {
+            let _ = win.show();
             let _ = win.set_focus();
         }
         Err(e) => eprintln!("failed to open paint window: {e}"),
@@ -772,7 +789,9 @@ pub(crate) fn show_paint_window(app: &AppHandle, coat: Option<String>) {
 
 #[tauri::command]
 fn open_paint(app: AppHandle, coat: Option<String>) {
-    show_paint_window(&app, coat);
+    // The page reads the active coat from localStorage; the argument is accepted for compatibility.
+    let _ = coat;
+    show_paint_window(&app);
 }
 
 #[tauri::command]

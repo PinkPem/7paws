@@ -93,7 +93,7 @@ pub fn setup_tray(app: &AppHandle, settings: Arc<Mutex<AppSettings>>) -> tauri::
                 let _ = app.emit("cat-settings", out);
             }
             "open_menu" => crate::show_settings_window(app),
-            "paint" => crate::show_paint_window(app, None),
+            "paint" => crate::show_paint_window(app),
             "quit" => app.exit(0),
             _ => {}
         })
